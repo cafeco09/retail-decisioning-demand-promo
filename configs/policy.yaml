@@ -1,0 +1,3 @@
+price_multipliers: [1.0, 0.95, 0.90, 0.85]
+max_discount_pct: 0.30
+sample_rows: 20000
