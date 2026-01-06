@@ -17,10 +17,14 @@ def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def add_price_promo_features(df: pd.DataFrame) -> pd.DataFrame:
     df["discount_pct"] = np.where(
-        df["BASE_PRICE"] > 0, (df["BASE_PRICE"] - df["PRICE"]) / df["BASE_PRICE"], 0.0
+        df["BASE_PRICE"] > 0,
+        (df["BASE_PRICE"] - df["PRICE"]) / df["BASE_PRICE"],
+        0.0,
     )
     df["discount_pct"] = df["discount_pct"].clip(-1, 1)
-    df["is_promo"] = ((df["FEATURE"] == 1) | (df["DISPLAY"] == 1) | (df["TPR_ONLY"] == 1)).astype("int8")
+    df["is_promo"] = (
+        (df["FEATURE"] == 1) | (df["DISPLAY"] == 1) | (df["TPR_ONLY"] == 1)
+    ).astype("int8")
     df["promo_feature"] = df["FEATURE"].astype("int8")
     df["promo_display"] = df["DISPLAY"].astype("int8")
     df["promo_tpr_only"] = df["TPR_ONLY"].astype("int8")
@@ -30,14 +34,14 @@ def add_lag_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.sort_values(["STORE_NUM", "UPC", "WEEK_END_DATE"])
     g = df.groupby(["STORE_NUM", "UPC"], sort=False)
 
-    # Behavioural demand signals
+    # Demand lags
     df["units_lag_1"] = g["UNITS"].shift(1)
     df["units_lag_4"] = g["UNITS"].shift(4)
-    df["units_roll_4"] = (
-        g["UNITS"].shift(1).rolling(4).mean().reset_index(level=[0, 1], drop=True)
+    df["units_roll_4"] = g["UNITS"].transform(
+        lambda s: s.shift(1).rolling(4, min_periods=1).mean()
     )
 
-    # Context lags (available at decision time)
+    # Context lags
     df["price_lag_1"] = g["PRICE"].shift(1)
     df["discount_lag_1"] = g["discount_pct"].shift(1)
     df["visits_lag_1"] = g["VISITS"].shift(1)
@@ -54,7 +58,7 @@ def add_lag_features(df: pd.DataFrame) -> pd.DataFrame:
     ]:
         df[c] = df[c].fillna(0.0)
 
-    # QC-only metrics (not used as features by default)
+    # QC-only metrics (not features by default)
     df["units_per_visit"] = np.where(df["VISITS"] > 0, df["UNITS"] / df["VISITS"], 0.0)
     df["visits_per_hh"] = np.where(df["HHS"] > 0, df["VISITS"] / df["HHS"], 0.0)
 
