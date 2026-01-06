@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # retail-decisioning-demand-promo
 Store-segment retail decisioning: forecast weekly demand and recommend constrained pricing/promo actions via predictive simulation.
 =======
@@ -6,6 +5,4 @@ Store-segment retail decisioning: forecast weekly demand and recommend constrain
 
 Retail decisioning engine: demand forecasting + constrained price/promo policy simulation (dunnhumby Breakfast at the Frat).
 
-This repo does not include the dataset. Place the Excel workbook at:
-data/raw/dunnhumby - Breakfast at the Frat.xlsx
->>>>>>> Initial repo scaffold
+This repo does not include the dataset. 
