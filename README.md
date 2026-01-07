@@ -1,42 +1,51 @@
 # Retail Decisioning: Demand Modelling + Price/Promo Policy Simulation
 
-Store-segment retail decisioning built on **store × product × week** data (dunnhumby *Breakfast at the Frat*).
-This repo trains a demand model and then simulates **constrained** pricing/promotion actions to recommend what to do next week.
+A practical retail “decisioning loop” built on dunnhumby *Breakfast at the Frat* data:  
+**forecast next-week demand** and **recommend constrained price/promo actions** via predictive simulation.
 
-**Important:** recommendations are produced via **predictive simulation** (not causal uplift). Promotions in the dataset are observational, not randomised.
-
----
-
-## What this project does
-
-### 1) Demand model (forecasting)
-Predicts **next-week unit sales (UNITS)** for each store–product pair using:
-- **Decision variables:** `PRICE`, `BASE_PRICE`, discount depth, and promo support (`FEATURE`, `DISPLAY`, `TPR_ONLY`)
-- **Behavioural time-series signals:** lags and rolling averages of past units (habit / replenishment patterns)
-- **Seasonality:** week/month effects
-- **Store context:** store segment (Value/Mainstream/Upscale) + geography
-- **Product context:** category/sub-category + manufacturer + size
-
-The model is saved as a single pipeline (preprocessing + model) so scoring and simulation use identical transformations.
-
-### 2) Decision engine (policy simulation)
-For each store–product–week context in the evaluation period, we:
-- generate a small set of **candidate actions** (price multipliers + historically observed promo combinations)
-- apply constraints (e.g., maximum discount cap)
-- score each action using the demand model
-- recommend the action that maximises **predicted revenue = predicted_units × candidate_price**
+> This repository is public and **does not include the dataset**. It contains code, configuration, and generated summary artefacts only.
 
 ---
 
-## What this project does *not* claim
+## What this project is
 
-- **No causal impact claims:** this is not an uplift model and does not prove promotions cause incremental sales.
-- **No dataset redistribution:** this repo does not include the dataset; it shares code only.
+Retail teams don’t just want a forecast — they want a decision:
+> *Given a store–product context this week, what price and promo action should we take next week, under constraints?*
+
+This repo implements an end-to-end prototype:
+
+1. **Extract** the dunnhumby Excel to parquet
+2. **Build features** (lags, rolling means, price/promo signals, seasonality, store & product context)
+3. **Train** a demand model (next-week units)
+4. **Simulate** candidate actions (price grid × observed promo combinations)
+5. **Recommend** actions under two policies:
+   - `revenue_only` (naïve baseline)
+   - `penalised` (adds penalties to approximate real-world scarcity/cost and margin pressure)
+
+---
+
 ## Dashboard
 
 ![Model metrics](reports/figures/01_model_metrics.png)
 ![Promo rate by policy](reports/figures/02_promo_rate_by_policy.png)
 ![Discount distribution by policy](reports/figures/03_discount_dist_by_policy.png)
+
+---
+
+## Results
+
+### Demand model (holdout)
+- **Test rows:** 103,966 store–product–week observations
+- **MAE:** 5.11286 units
+- **sMAPE:** 0.368846
+
+### Decisioning behaviour (sample_rows=200)
+- **Revenue-only policy**
+  - promo rate: **1.00**
+  - full-price share (0% discount): **0.04** (8/200)
+- **Penalised policy** (λ_discount=75, λ_promo=25)
+  - promo rate: **0.48**
+  - full-price share (0% discount): **0.545** (109/200)
 
 ---
 
