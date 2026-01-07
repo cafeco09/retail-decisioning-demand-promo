@@ -4,6 +4,5 @@ sample_rows: 200
 promo_combo_cap: 25
 batch_size: 5000
 
-# penalties (set to 0.0 to disable)
-lambda_discount: 25.0
-lambda_promo: 5.0
+lambda_discount: 75.0
+lambda_promo: 25.0

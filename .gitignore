@@ -25,3 +25,10 @@ __pycache__/
 .DS_Store
 .vscode/
 .idea/
+# --- allow small, derived report artefacts ---
+!reports/
+!reports/metrics.csv
+!reports/recommended_actions_sample.csv
+!reports/figures/
+!reports/figures/*.png
+
