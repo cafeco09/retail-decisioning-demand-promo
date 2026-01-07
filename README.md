@@ -57,11 +57,7 @@ Place the Excel workbook here:
 data/raw/dunnhumby - Breakfast at the Frat.xlsx
 
 
-```
-
 ---
-
-## Quickstart
 
 python -m venv .venv
 source .venv/bin/activate
