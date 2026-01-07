@@ -53,12 +53,17 @@ This repo implements an end-to-end prototype:
 
 Place the Excel workbook here:
 
-```text
+~~~text
 data/raw/dunnhumby - Breakfast at the Frat.xlsx
+~~~
 
+The repo is public, so `data/raw/` is ignored by `.gitignore`.
 
 ---
 
+## Quickstart
+
+~~~bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -68,10 +73,63 @@ python scripts/02_build_features.py
 python scripts/03_train_model.py
 python scripts/04_policy_simulator.py
 python scripts/07_make_dashboard.py
+~~~
 
+---
+
+## Configuration
+
+`configs/policy.yaml` controls the action space, constraints, and penalty weights:
+
+- `price_multipliers`: discrete price grid (e.g., `[1.0, 0.95, 0.90, 0.85]`)
+- `max_discount_pct`: hard discount cap
+- `sample_rows`: number of holdout rows simulated (speed vs stability)
+- `promo_combo_cap`: how many historically observed promo patterns to consider
+- `lambda_discount`: penalty for discount depth (margin pressure proxy)
+- `lambda_promo`: penalty for promo usage (scarcity/cost proxy)
+
+---
+
+## Key outputs
+
+- `reports/metrics.csv` — holdout metrics
+- `reports/recommended_actions_sample.csv` — recommended action per row for both policies
+- `reports/figures/*.png` — dashboard plots
+- `data/processed/demand_model.joblib` — trained pipeline (local artefact; usually not committed)
 
 ---
 
 ## Notes
 
-This is **predictive simulation**, not causal uplift modelling. Promotions are observational in the dataset.
+- This is **predictive simulation**, not causal uplift modelling. Promotions are observational in the dataset.
+- The decision engine optimises predicted outcomes under observed correlations; without constraints it can over-recommend promos/discounts.
+
+---
+
+## Repo structure
+
+~~~text
+configs/
+  policy.yaml
+data/
+  raw/                      # local only (ignored)
+  processed/                # local artefacts (parquet + model)
+reports/
+  metrics.csv
+  recommended_actions_sample.csv
+  figures/
+scripts/
+  01_extract_to_parquet.py
+  02_build_features.py
+  03_train_model.py
+  04_policy_simulator.py
+  07_make_dashboard.py
+src/
+  (optional) reusable package code
+~~~
+
+---
+
+## Licence
+
+Add a licence (MIT or Apache-2.0 recommended) if you want others to reuse the code.
