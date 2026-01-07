@@ -32,6 +32,11 @@ For each store–product–week context in the evaluation period, we:
 
 - **No causal impact claims:** this is not an uplift model and does not prove promotions cause incremental sales.
 - **No dataset redistribution:** this repo does not include the dataset; it shares code only.
+## Dashboard
+
+![Model metrics](reports/figures/01_model_metrics.png)
+![Promo rate by policy](reports/figures/02_promo_rate_by_policy.png)
+![Discount distribution by policy](reports/figures/03_discount_dist_by_policy.png)
 
 ---
 
