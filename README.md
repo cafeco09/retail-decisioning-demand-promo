@@ -57,3 +57,15 @@ Place the Excel workbook here:
 ```text
 data/raw/dunnhumby - Breakfast at the Frat.xlsx
 ```
+
+---
+
+## Quickstart
+
+
+
+---
+
+## Notes
+
+This is **predictive simulation**, not causal uplift modelling. Promotions are observational in the dataset.
