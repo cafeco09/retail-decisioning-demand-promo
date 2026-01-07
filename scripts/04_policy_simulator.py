@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Fast constrained policy simulator (predictive, not causal).
-# Vectorises scoring by batching candidate actions.
+# Vectorised scoring via batching.
 
 from __future__ import annotations
 from pathlib import Path
@@ -22,7 +22,8 @@ def main():
     price_mults = list(cfg.get("price_multipliers", [1.0, 0.95, 0.90, 0.85]))
     max_disc = float(cfg.get("max_discount_pct", 0.30))
     sample_rows = int(cfg.get("sample_rows", 200))
-    batch_size = int(cfg.get("batch_size", 5000))  # optional, safe default
+    batch_size = int(cfg.get("batch_size", 5000))
+    promo_cap = int(cfg.get("promo_combo_cap", 25))
 
     df = pd.read_parquet(DATA / "model_frame.parquet").sort_values("WEEK_END_DATE")
 
@@ -31,16 +32,25 @@ def main():
     hist = df[df["WEEK_END_DATE"] <= cut]
     holdout = df[df["WEEK_END_DATE"] > cut].copy()
 
-    # Limit promo combos to observed patterns, but cap cardinality for speed
-    promo_combos = (
-        hist[["promo_feature", "promo_display", "promo_tpr_only"]]
-        .drop_duplicates()
-        .reset_index(drop=True)
+    # Promo combos by frequency (not random) + force at least one promo-on if present
+    combo_cols = ["promo_feature", "promo_display", "promo_tpr_only"]
+    combo_counts = (
+        hist[combo_cols]
+        .value_counts()
+        .reset_index(name="n")
+        .sort_values("n", ascending=False)
     )
-    # cap combos (optional safety)
-    promo_cap = int(cfg.get("promo_combo_cap", 25))
-    if len(promo_combos) > promo_cap:
-        promo_combos = promo_combos.sample(promo_cap, random_state=42).reset_index(drop=True)
+
+    promo_combos = combo_counts[combo_cols].head(promo_cap).reset_index(drop=True)
+
+    promo_on = combo_counts[combo_counts[combo_cols].sum(axis=1) > 0]
+    if len(promo_on) > 0:
+        first_on = promo_on[combo_cols].head(1)
+        promo_combos = (
+            pd.concat([promo_combos, first_on], ignore_index=True)
+            .drop_duplicates()
+            .reset_index(drop=True)
+        )
 
     pipe = joblib.load(DATA / "demand_model.joblib")
 
@@ -59,32 +69,37 @@ def main():
     cols = numeric + categorical
 
     base = holdout.sample(min(sample_rows, len(holdout)), random_state=42).reset_index(drop=True)
+    key_cols = ["WEEK_END_DATE", "STORE_NUM", "UPC"]
+    base_keys = base[key_cols].copy()
+    base_keys["base_id"] = np.arange(len(base_keys))
 
-    # Build candidate action table (vectorised)
-    candidates = []
+    # ---- build price candidates (vectorised) ----
+    cand_list = []
     for pm in price_mults:
-        cand = base.copy()
-        cand["PRICE"] = cand["BASE_PRICE"].astype(float) * float(pm)
-        cand["discount_pct"] = np.where(
-            cand["BASE_PRICE"].astype(float) > 0,
-            (cand["BASE_PRICE"].astype(float) - cand["PRICE"].astype(float)) / cand["BASE_PRICE"].astype(float),
-            0.0
+        c = base.copy()
+        c["price_mult"] = float(pm)
+        c["PRICE"] = c["BASE_PRICE"].astype(float) * float(pm)
+        c["discount_pct"] = np.where(
+            c["BASE_PRICE"].astype(float) > 0,
+            (c["BASE_PRICE"].astype(float) - c["PRICE"].astype(float)) / c["BASE_PRICE"].astype(float),
+            0.0,
         )
-        cand = cand[cand["discount_pct"] <= max_disc].copy()
-        cand["price_mult"] = float(pm)
-        candidates.append(cand)
+        c = c[c["discount_pct"] <= max_disc].copy()
+        cand_list.append(c)
 
-    if not candidates:
-        raise RuntimeError("No candidates after applying max_discount constraint.")
+    if not cand_list:
+        raise RuntimeError("No candidates after applying max_discount_pct constraint.")
 
-    base_cand = pd.concat(candidates, ignore_index=True)
+    base_cand = pd.concat(cand_list, ignore_index=True)
 
-    # Cross join with promo combos (bounded by promo_cap)
+    # ---- cross join with promo combos (bounded) ----
     base_cand["_k"] = 1
+    promo_combos = promo_combos.copy()
     promo_combos["_k"] = 1
+
     cand = base_cand.merge(promo_combos, on="_k", suffixes=("", "_p")).drop(columns=["_k"])
 
-    # Apply promo columns from combos
+    # Apply promo values from combos
     cand["promo_feature"] = cand["promo_feature_p"].astype(int)
     cand["promo_display"] = cand["promo_display_p"].astype(int)
     cand["promo_tpr_only"] = cand["promo_tpr_only_p"].astype(int)
@@ -94,7 +109,10 @@ def main():
         (cand["promo_feature"] == 1) | (cand["promo_display"] == 1) | (cand["promo_tpr_only"] == 1)
     ).astype("int8")
 
-    # Score in batches
+    # Attach base_id for grouping best action
+    cand = cand.merge(base_keys, on=key_cols, how="left")
+
+    # ---- score in batches ----
     preds = np.empty(len(cand), dtype=float)
     for start in range(0, len(cand), batch_size):
         end = min(start + batch_size, len(cand))
@@ -104,21 +122,7 @@ def main():
     cand["units_pred"] = preds
     cand["revenue_pred"] = cand["units_pred"] * cand["PRICE"].astype(float)
 
-    # Pick best action per original row (use index of base row via an id)
-    cand["base_id"] = cand.index // (len(promo_combos) if len(promo_combos) else 1)  # fallback
-    # Better: reconstruct base_id from merge order
-    # base rows repeat in blocks of (price_mult candidates * promo_combos). We keep a stable id from base.
-    # We'll add it properly:
-    # (recreate quickly)
-    # NOTE: base_id is added below more robustly.
-    # --- robust base_id ---
-    # base had rows 0..n-1; base_cand preserves them but after concat.
-    # We'll derive from 'WEEK_END_DATE, STORE_NUM, UPC' keys + row number.
-    key_cols = ["WEEK_END_DATE", "STORE_NUM", "UPC"]
-    base_keys = base[key_cols].copy()
-    base_keys["base_id"] = np.arange(len(base_keys))
-    cand = cand.merge(base_keys, on=key_cols, how="left")
-
+    # Choose best action per base_id (max revenue)
     best = (
         cand.sort_values(["base_id", "revenue_pred"], ascending=[True, False])
         .groupby("base_id", as_index=False)
@@ -140,6 +144,7 @@ def main():
 
     out_path = REPORTS / "recommended_actions_sample.csv"
     out.to_csv(out_path, index=False)
+
     print(f"Wrote recommendations: {len(out):,} rows -> {out_path}")
     print(f"Candidates scored: {len(cand):,} (sample_rows={len(base)}, price_mults={len(price_mults)}, promo_combos={len(promo_combos)})")
 
