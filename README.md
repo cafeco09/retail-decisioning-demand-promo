@@ -63,6 +63,15 @@ data/raw/dunnhumby - Breakfast at the Frat.xlsx
 
 ## Quickstart
 
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+python scripts/01_extract_to_parquet.py --xlsx "data/raw/dunnhumby - Breakfast at the Frat.xlsx"
+python scripts/02_build_features.py
+python scripts/03_train_model.py
+python scripts/04_policy_simulator.py
+python scripts/07_make_dashboard.py
 
 
 ---
